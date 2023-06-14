@@ -15,6 +15,9 @@
 *******************************************************************************/
 
 #include <string>
+#include <linux/perf_event.h>
+#include <asm/unistd.h>
+#include <unistd.h>
 
 #include "c_types_map.hpp"
 #include "engine.hpp"
@@ -99,10 +102,146 @@ status_t primitive_execute(
 
     if (get_verbose()) {
         stream->wait();
+		        //todo: add cache perf
+		static std::string verbose_more_env = getenv_string_user("VERBOSE_MORE");
+		int verbose_more_setting = 0;
+		enum more_info_settings : int {
+			No_info = 0,
+			LLC_W_Info = 1,
+			LLC_R_Info = 2,
+			L1D_Info = 10
+		};
+		if (verbose_more_env == "llc_w_info")
+		{
+			verbose_more_setting = more_info_settings::LLC_W_Info;
+		}
+		else if (verbose_more_env == "llc_r_info")
+		{
+			verbose_more_setting = more_info_settings::LLC_R_Info;
+		}
+		else if (verbose_more_env == "l1d_info")
+		{
+			verbose_more_setting = more_info_settings::L1D_Info;
+		}
+		else
+		{
+			// printf("verbose_more_env.length = %d\nverbose_more_env = %s\n",verbose_more_env.length(),verbose_more_env.c_str());
+			verbose_more_setting = more_info_settings::No_info;
+		}
+		
+		struct perf_event_attr pe_llc_cache_write_acc;
+		struct perf_event_attr pe_llc_cache_write_miss;
+		struct perf_event_attr pe_llc_cache_read_acc;
+		struct perf_event_attr pe_llc_cache_read_miss;
+		struct perf_event_attr pe_l1_cache_write_acc;
+		struct perf_event_attr pe_l1_cache_read_acc;
+		struct perf_event_attr pe_l1_cache_read_miss;
+
+		memset(&pe_llc_cache_write_miss, 0, sizeof(struct perf_event_attr));
+		pe_llc_cache_write_miss.type = PERF_TYPE_HW_CACHE; // 使用硬件缓存事件类型
+		pe_llc_cache_write_miss.size = sizeof(struct perf_event_attr);
+		pe_llc_cache_write_miss.config = (PERF_COUNT_HW_CACHE_LL) | (PERF_COUNT_HW_CACHE_OP_WRITE << 8) | (PERF_COUNT_HW_CACHE_RESULT_ACCESS << 16);
+		pe_llc_cache_write_miss.exclude_kernel = 1;
+		pe_llc_cache_write_miss.pinned = 1;
+		// pe_llc_write_acc.exclude_idle = 1;
+		// pe_llc_write_acc.exclude_hv = 1;
+
+		memset(&pe_llc_cache_write_acc, 0, sizeof(struct perf_event_attr));
+		pe_llc_cache_write_acc.type = PERF_TYPE_HW_CACHE; // 使用硬件缓存事件类型
+		pe_llc_cache_write_acc.size = sizeof(struct perf_event_attr);
+		pe_llc_cache_write_acc.config = (PERF_COUNT_HW_CACHE_LL) | (PERF_COUNT_HW_CACHE_OP_WRITE << 8) | (PERF_COUNT_HW_CACHE_RESULT_ACCESS << 16);
+		pe_llc_cache_write_acc.exclude_kernel = 1;
+		pe_llc_cache_write_acc.pinned = 1;
+		// pe_llc_write_acc.exclude_idle = 1;
+		// pe_llc_write_acc.exclude_hv = 1;
+
+		memset(&pe_llc_cache_read_miss, 0, sizeof(struct perf_event_attr));
+		pe_llc_cache_read_miss.type = PERF_TYPE_HW_CACHE; // 使用硬件缓存事件类型
+		pe_llc_cache_read_miss.size = sizeof(struct perf_event_attr);
+		pe_llc_cache_read_miss.config = (PERF_COUNT_HW_CACHE_LL) | (PERF_COUNT_HW_CACHE_OP_READ << 8) | (PERF_COUNT_HW_CACHE_RESULT_MISS << 16);
+		pe_llc_cache_read_miss.exclude_kernel = 1;
+		pe_llc_cache_read_miss.pinned = 1;
+		// pe_llc_write_miss.exclude_idle = 1;
+		// pe_llc_write_miss.exclude_hv = 1;
+
+		memset(&pe_llc_cache_read_acc, 0, sizeof(struct perf_event_attr));
+		pe_llc_cache_read_acc.type = PERF_TYPE_HW_CACHE; // 使用硬件缓存事件类型
+		pe_llc_cache_read_acc.size = sizeof(struct perf_event_attr);
+		pe_llc_cache_read_acc.config = (PERF_COUNT_HW_CACHE_LL) | (PERF_COUNT_HW_CACHE_OP_READ << 8) | (PERF_COUNT_HW_CACHE_RESULT_ACCESS << 16);
+		pe_llc_cache_read_acc.exclude_kernel = 1;
+		pe_llc_cache_read_acc.pinned = 1;
+		// pe_llc_write_acc.exclude_idle = 1;
+		// pe_llc_write_acc.exclude_hv = 1;
+
+		memset(&pe_l1_cache_write_acc, 0, sizeof(struct perf_event_attr));
+		pe_l1_cache_write_acc.type = PERF_TYPE_HW_CACHE; // 使用硬件缓存事件类型
+		pe_l1_cache_write_acc.size = sizeof(struct perf_event_attr);
+		pe_l1_cache_write_acc.config = (PERF_COUNT_HW_CACHE_L1D) | (PERF_COUNT_HW_CACHE_OP_WRITE << 8) | (PERF_COUNT_HW_CACHE_RESULT_ACCESS << 16);
+		pe_l1_cache_write_acc.exclude_kernel = 1;
+		pe_l1_cache_write_acc.pinned = 1;
+		// pe_llc_write_acc.exclude_idle = 1;
+		// pe_llc_write_acc.exclude_hv = 1;
+
+		memset(&pe_l1_cache_read_miss, 0, sizeof(struct perf_event_attr));
+		pe_l1_cache_read_miss.type = PERF_TYPE_HW_CACHE; // 使用硬件缓存事件类型
+		pe_l1_cache_read_miss.size = sizeof(struct perf_event_attr);
+		pe_l1_cache_read_miss.config = (PERF_COUNT_HW_CACHE_L1D) | (PERF_COUNT_HW_CACHE_OP_READ << 8) | (PERF_COUNT_HW_CACHE_RESULT_MISS << 16);
+		pe_l1_cache_read_miss.exclude_kernel = 1;
+		pe_l1_cache_read_miss.pinned = 1;
+		// pe_llc_write_miss.exclude_idle = 1;
+		// pe_llc_write_miss.exclude_hv = 1;
+
+		memset(&pe_l1_cache_read_acc, 0, sizeof(struct perf_event_attr));
+		pe_l1_cache_read_acc.type = PERF_TYPE_HW_CACHE; // 使用硬件缓存事件类型
+		pe_l1_cache_read_acc.size = sizeof(struct perf_event_attr);
+		pe_l1_cache_read_acc.config = (PERF_COUNT_HW_CACHE_L1D) | (PERF_COUNT_HW_CACHE_OP_READ << 8) | (PERF_COUNT_HW_CACHE_RESULT_ACCESS << 16);
+		pe_l1_cache_read_acc.exclude_kernel = 1;
+		pe_l1_cache_read_acc.pinned = 1;
+		// pe_llc_write_acc.exclude_idle = 1;
+		// pe_llc_write_acc.exclude_hv = 1;
+		pid_t pid = getpid();
+		int fd_llc_w_miss = (verbose_more_setting!=more_info_settings::LLC_W_Info)?(-1):(syscall(__NR_perf_event_open, &pe_llc_cache_write_miss, pid, -1, -1, 0));
+		int fd_llc_w_acc = (verbose_more_setting!=more_info_settings::LLC_W_Info)?(-1):(syscall(__NR_perf_event_open, &pe_llc_cache_write_acc, pid, -1, -1, 0));
+		int fd_llc_r_miss = (verbose_more_setting!=more_info_settings::LLC_R_Info)?(-1):(syscall(__NR_perf_event_open, &pe_llc_cache_read_miss, pid, -1, -1, 0));
+		int fd_llc_r_acc = (verbose_more_setting!=more_info_settings::LLC_R_Info)?(-1):(syscall(__NR_perf_event_open, &pe_llc_cache_read_acc, pid, -1, -1, 0));
+		int fd_l1_w_acc = (verbose_more_setting!=more_info_settings::L1D_Info)?(-1):(syscall(__NR_perf_event_open, &pe_l1_cache_write_acc, pid, -1, -1, 0));
+		int fd_l1_r_miss = (verbose_more_setting!=more_info_settings::L1D_Info)?(-1):(syscall(__NR_perf_event_open, &pe_l1_cache_read_miss, pid, -1, -1, 0));
+		int fd_l1_r_acc = (verbose_more_setting!=more_info_settings::L1D_Info)?(-1):(syscall(__NR_perf_event_open, &pe_l1_cache_read_acc, pid, -1, -1, 0));
+
         double start_ms = get_msec();
         status = stream->enqueue_primitive(primitive_iface, ctx);
         stream->wait();
         double duration_ms = get_msec() - start_ms;
+		unsigned long count[10];
+		(verbose_more_setting!=more_info_settings::LLC_W_Info)?(-1):read(fd_llc_w_miss, &count[2], sizeof(unsigned long));
+		(verbose_more_setting!=more_info_settings::LLC_W_Info)?(-1):read(fd_llc_w_acc, &count[3], sizeof(unsigned long));
+		(verbose_more_setting!=more_info_settings::LLC_R_Info)?(-1):read(fd_llc_r_miss, &count[4], sizeof(unsigned long));
+		(verbose_more_setting!=more_info_settings::LLC_R_Info)?(-1):read(fd_llc_r_acc, &count[5], sizeof(unsigned long));
+		(verbose_more_setting!=more_info_settings::L1D_Info)?(-1):read(fd_l1_w_acc, &count[7], sizeof(unsigned long));
+		(verbose_more_setting!=more_info_settings::L1D_Info)?(-1):read(fd_l1_r_miss, &count[8], sizeof(unsigned long));
+		(verbose_more_setting!=more_info_settings::L1D_Info)?(-1):read(fd_l1_r_acc, &count[9], sizeof(unsigned long));
+		
+		(verbose_more_setting!=more_info_settings::LLC_W_Info)?(-1):printf("LLC hw_cache write misses: %'lu\n", count[2]);
+		(verbose_more_setting!=more_info_settings::LLC_W_Info)?(-1):printf("LLC hw_cache write acc: %'lu\n", count[3]);
+		(verbose_more_setting!=more_info_settings::LLC_R_Info)?(-1):printf("LLC hw_cache read misses: %'lu\n", count[4]);
+		(verbose_more_setting!=more_info_settings::LLC_R_Info)?(-1):printf("LLC hw_cache read acc: %'lu\n", count[5]);
+		(verbose_more_setting!=more_info_settings::L1D_Info)?(-1):printf("L1 hw_l1cache write acc: %'lu\n", count[7]);
+		(verbose_more_setting!=more_info_settings::L1D_Info)?(-1):printf("L1 hw_l1cache read misses: %'lu\n", count[8]);
+		(verbose_more_setting!=more_info_settings::L1D_Info)?(-1):printf("L1 hw_l1cache read acc: %'lu\n", count[9]);
+		
+		(verbose_more_setting!=more_info_settings::LLC_W_Info)?(-1):printf("LLC hw_cache write_miss ratio: %lf\n", ((count[3]==0)?(1.0):(1.0*count[2])/count[3]));
+		(verbose_more_setting!=more_info_settings::LLC_R_Info)?(-1):printf("LLC hw_cache read_miss ratio: %lf\n", (count[5]==0)?(1.0):((1.0*count[4])/count[5]));
+		(verbose_more_setting!=more_info_settings::L1D_Info)?(-1):printf("L1 hw_l1cache read/write ratio: r%lf:w%lf\n", (count[9]+count[7]==0)?(1.0):(1.0*count[9])/(count[9]+count[7]),(1.0*count[7])/(count[9]+count[7]));
+		(verbose_more_setting!=more_info_settings::L1D_Info)?(-1):printf("L1 hw_l1cache read_miss ratio: %lf\n", (count[9]==0)?(1.0):((1.0*count[8])/count[9]));
+
+		(verbose_more_setting!=more_info_settings::LLC_W_Info)?(-1):close(fd_llc_w_miss);
+		(verbose_more_setting!=more_info_settings::LLC_W_Info)?(-1):close(fd_llc_w_acc);
+		(verbose_more_setting!=more_info_settings::LLC_R_Info)?(-1):close(fd_llc_r_miss);
+		(verbose_more_setting!=more_info_settings::LLC_R_Info)?(-1):close(fd_llc_r_acc);
+		(verbose_more_setting!=more_info_settings::L1D_Info)?(-1):close(fd_l1_w_acc);
+		(verbose_more_setting!=more_info_settings::L1D_Info)?(-1):close(fd_l1_r_miss);
+		(verbose_more_setting!=more_info_settings::L1D_Info)?(-1):close(fd_l1_r_acc);
+
         std::string stamp;
         if (get_verbose_timestamp()) stamp = "," + std::to_string(start_ms);
 
