@@ -305,6 +305,7 @@ status_t primitive_execute(
 		(verbose_more_setting!=more_info_settings::LLC_R_Info)?(-1):printf("LLC hw_cache read_miss ratio: %lf\n", (count[5]==0)?(1.0):((1.0*count[4])/count[5]));
 		(verbose_more_setting!=more_info_settings::L1D_Info)?(-1):printf("L1 hw_l1cache read/write ratio: r%lf:w%lf\n", (count[9]+count[7]==0)?(1.0):(1.0*count[9])/(count[9]+count[7]),(1.0*count[7])/(count[9]+count[7]));
 		(verbose_more_setting!=more_info_settings::L1D_Info)?(-1):printf("L1 hw_l1cache read_miss ratio: %lf\n", (count[9]==0)?(1.0):((1.0*count[8])/count[9]));
+		(verbose_more_setting!=more_info_settings::L1D_Info)?(-1):printf("L1 hw_l1cache read_miss(write alloc) ratio: %lf\n", (count[9]==0)?(1.0):((1.0*count[8])/(count[9]+count[7])));
 
 		(verbose_more_setting!=more_info_settings::LLC_W_Info)?(-1):close(fd_llc_w_miss);
 		(verbose_more_setting!=more_info_settings::LLC_W_Info)?(-1):close(fd_llc_w_acc);
