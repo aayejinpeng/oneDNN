@@ -315,6 +315,12 @@ status_t primitive_execute(
 		(verbose_more_setting!=more_info_settings::L1D_Info)?(-1):close(fd_l1_r_miss);
 		(verbose_more_setting!=more_info_settings::L1D_Info)?(-1):close(fd_l1_r_acc);
 
+		(verbose_more_setting!=more_info_settings::Cycles_Info)?(-1):close(fd_bus_cycle);
+		(verbose_more_setting!=more_info_settings::Cycles_Info)?(-1):close(fd_cpu_cycle);
+		(verbose_more_setting!=more_info_settings::Cycles_Info)?(-1):close(fd_cpu_ref_cycle);
+		(verbose_more_setting!=more_info_settings::Cycles_Info)?(-1):close(fd_stall_frontend_cycle);
+		(verbose_more_setting!=more_info_settings::Cycles_Info)?(-1):close(fd_stall_backtend_cycle);
+
         std::string stamp;
         if (get_verbose_timestamp()) stamp = "," + std::to_string(start_ms);
 
