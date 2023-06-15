@@ -110,7 +110,8 @@ status_t primitive_execute(
 			LLC_W_Info = 1,
 			LLC_R_Info = 2,
 			L1D_Info = 10,
-			Cycles_Info = 100
+			Cycles_Info = 100,
+			Cycles_stall_Info = 101
 		};
 		if (verbose_more_env == "llc_w_info")
 		{
@@ -128,12 +129,16 @@ status_t primitive_execute(
 		{
 			verbose_more_setting = more_info_settings::Cycles_Info;
 		}
+		else if (verbose_more_env == "cycles_stall_info")
+		{
+			verbose_more_setting = more_info_settings::Cycles_stall_Info;
+		}
 		else
 		{
 			// printf("verbose_more_env.length = %d\nverbose_more_env = %s\n",verbose_more_env.length(),verbose_more_env.c_str());
 			verbose_more_setting = more_info_settings::No_info;
 		}
-		
+
 		struct perf_event_attr pe_llc_cache_write_acc;
 		struct perf_event_attr pe_llc_cache_write_miss;
 		struct perf_event_attr pe_llc_cache_read_acc;
@@ -265,8 +270,8 @@ status_t primitive_execute(
 		int fd_cpu_ref_cycle = (verbose_more_setting!=more_info_settings::Cycles_Info)?(-1):(syscall(__NR_perf_event_open, &pe_CPU_REF_CYCLES, pid, -1, -1, 0));
 		int fd_cpu_cycle = (verbose_more_setting!=more_info_settings::Cycles_Info)?(-1):(syscall(__NR_perf_event_open, &pe_CPU_CYCLES, pid, -1, -1, 0));
 		int fd_bus_cycle = (verbose_more_setting!=more_info_settings::Cycles_Info)?(-1):(syscall(__NR_perf_event_open, &pe_BUS_CYCLES, pid, -1, -1, 0));
-		int fd_stall_frontend_cycle = (verbose_more_setting!=more_info_settings::Cycles_Info)?(-1):(syscall(__NR_perf_event_open, &pe_STALLED_CYCLES_FRONTEND, pid, -1, -1, 0));
-		int fd_stall_backtend_cycle = (verbose_more_setting!=more_info_settings::Cycles_Info)?(-1):(syscall(__NR_perf_event_open, &pe_STALLED_CYCLES_BACKEND, pid, -1, -1, 0));
+		int fd_stall_frontend_cycle = (verbose_more_setting!=more_info_settings::Cycles_stall_Info)?(-1):(syscall(__NR_perf_event_open, &pe_STALLED_CYCLES_FRONTEND, pid, -1, -1, 0));
+		int fd_stall_backtend_cycle = (verbose_more_setting!=more_info_settings::Cycles_stall_Info)?(-1):(syscall(__NR_perf_event_open, &pe_STALLED_CYCLES_BACKEND, pid, -1, -1, 0));
 
         double start_ms = get_msec();
         status = stream->enqueue_primitive(primitive_iface, ctx);
@@ -280,13 +285,13 @@ status_t primitive_execute(
 		(verbose_more_setting!=more_info_settings::L1D_Info)?(-1):read(fd_l1_w_acc, &count[7], sizeof(unsigned long));
 		(verbose_more_setting!=more_info_settings::L1D_Info)?(-1):read(fd_l1_r_miss, &count[8], sizeof(unsigned long));
 		(verbose_more_setting!=more_info_settings::L1D_Info)?(-1):read(fd_l1_r_acc, &count[9], sizeof(unsigned long));
-		
+
 		(verbose_more_setting!=more_info_settings::Cycles_Info)?(-1):read(fd_cpu_ref_cycle, &count[14], sizeof(unsigned long));
 		(verbose_more_setting!=more_info_settings::Cycles_Info)?(-1):read(fd_cpu_cycle, &count[15], sizeof(unsigned long));
 		(verbose_more_setting!=more_info_settings::Cycles_Info)?(-1):read(fd_bus_cycle, &count[17], sizeof(unsigned long));
-		(verbose_more_setting!=more_info_settings::Cycles_Info)?(-1):read(fd_stall_frontend_cycle, &count[18], sizeof(unsigned long));
-		(verbose_more_setting!=more_info_settings::Cycles_Info)?(-1):read(fd_stall_backtend_cycle, &count[19], sizeof(unsigned long));
-		
+		(verbose_more_setting!=more_info_settings::Cycles_stall_Info)?(-1):read(fd_stall_frontend_cycle, &count[18], sizeof(unsigned long));
+		(verbose_more_setting!=more_info_settings::Cycles_stall_Info)?(-1):read(fd_stall_backtend_cycle, &count[19], sizeof(unsigned long));
+
 		(verbose_more_setting!=more_info_settings::LLC_W_Info)?(-1):printf("LLC hw_cache write misses: %'lu\n", count[2]);
 		(verbose_more_setting!=more_info_settings::LLC_W_Info)?(-1):printf("LLC hw_cache write acc: %'lu\n", count[3]);
 		(verbose_more_setting!=more_info_settings::LLC_R_Info)?(-1):printf("LLC hw_cache read misses: %'lu\n", count[4]);
@@ -298,9 +303,9 @@ status_t primitive_execute(
 		(verbose_more_setting!=more_info_settings::Cycles_Info)?(-1):printf("cpu_ref_cycle: %'lu\n", count[14]);
 		(verbose_more_setting!=more_info_settings::Cycles_Info)?(-1):printf("cpu_cycle: %'lu\n", count[15]);
 		(verbose_more_setting!=more_info_settings::Cycles_Info)?(-1):printf("bus_cycle: %'lu\n", count[17]);
-		(verbose_more_setting!=more_info_settings::Cycles_Info)?(-1):printf("stall_frontend_cycle: %'lu\n", count[18]);
-		(verbose_more_setting!=more_info_settings::Cycles_Info)?(-1):printf("stall_backtend_cycle: %'lu\n", count[19]);
-		
+		(verbose_more_setting!=more_info_settings::Cycles_stall_Info)?(-1):printf("stall_frontend_cycle: %'lu\n", count[18]);
+		(verbose_more_setting!=more_info_settings::Cycles_stall_Info)?(-1):printf("stall_backtend_cycle: %'lu\n", count[19]);
+
 		(verbose_more_setting!=more_info_settings::LLC_W_Info)?(-1):printf("LLC hw_cache write_miss ratio: %lf\n", ((count[3]==0)?(1.0):(1.0*count[2])/count[3]));
 		(verbose_more_setting!=more_info_settings::LLC_R_Info)?(-1):printf("LLC hw_cache read_miss ratio: %lf\n", (count[5]==0)?(1.0):((1.0*count[4])/count[5]));
 		(verbose_more_setting!=more_info_settings::L1D_Info)?(-1):printf("L1 hw_l1cache read/write ratio: r%lf:w%lf\n", (count[9]+count[7]==0)?(1.0):(1.0*count[9])/(count[9]+count[7]),(1.0*count[7])/(count[9]+count[7]));
@@ -318,8 +323,8 @@ status_t primitive_execute(
 		(verbose_more_setting!=more_info_settings::Cycles_Info)?(-1):close(fd_bus_cycle);
 		(verbose_more_setting!=more_info_settings::Cycles_Info)?(-1):close(fd_cpu_cycle);
 		(verbose_more_setting!=more_info_settings::Cycles_Info)?(-1):close(fd_cpu_ref_cycle);
-		(verbose_more_setting!=more_info_settings::Cycles_Info)?(-1):close(fd_stall_frontend_cycle);
-		(verbose_more_setting!=more_info_settings::Cycles_Info)?(-1):close(fd_stall_backtend_cycle);
+		(verbose_more_setting!=more_info_settings::Cycles_stall_Info)?(-1):close(fd_stall_frontend_cycle);
+		(verbose_more_setting!=more_info_settings::Cycles_stall_Info)?(-1):close(fd_stall_backtend_cycle);
 
         std::string stamp;
         if (get_verbose_timestamp()) stamp = "," + std::to_string(start_ms);
