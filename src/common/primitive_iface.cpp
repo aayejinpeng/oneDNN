@@ -109,7 +109,8 @@ status_t primitive_execute(
 			No_info = 0,
 			LLC_W_Info = 1,
 			LLC_R_Info = 2,
-			L1D_Info = 10
+			L1D_Info = 10,
+			Cycles_Info = 100
 		};
 		if (verbose_more_env == "llc_w_info")
 		{
@@ -122,6 +123,10 @@ status_t primitive_execute(
 		else if (verbose_more_env == "l1d_info")
 		{
 			verbose_more_setting = more_info_settings::L1D_Info;
+		}
+		else if (verbose_more_env == "cycles_info")
+		{
+			verbose_more_setting = more_info_settings::Cycles_Info;
 		}
 		else
 		{
@@ -136,6 +141,56 @@ status_t primitive_execute(
 		struct perf_event_attr pe_l1_cache_write_acc;
 		struct perf_event_attr pe_l1_cache_read_acc;
 		struct perf_event_attr pe_l1_cache_read_miss;
+		struct perf_event_attr pe_CPU_REF_CYCLES;
+		struct perf_event_attr pe_CPU_CYCLES;
+		struct perf_event_attr pe_BUS_CYCLES;
+		struct perf_event_attr pe_STALLED_CYCLES_FRONTEND;
+		struct perf_event_attr pe_STALLED_CYCLES_BACKEND;
+
+		memset(&pe_STALLED_CYCLES_FRONTEND, 0, sizeof(struct perf_event_attr));
+		pe_STALLED_CYCLES_FRONTEND.type = PERF_TYPE_HARDWARE; // 使用硬件缓存事件类型
+		pe_STALLED_CYCLES_FRONTEND.size = sizeof(struct perf_event_attr);
+		pe_STALLED_CYCLES_FRONTEND.config = PERF_COUNT_HW_STALLED_CYCLES_FRONTEND;
+		pe_STALLED_CYCLES_FRONTEND.exclude_kernel = 1;
+		pe_STALLED_CYCLES_FRONTEND.pinned = 1;
+		// pe_llc_write_acc.exclude_idle = 1;
+		// pe_llc_write_acc.exclude_hv = 1;
+
+		memset(&pe_STALLED_CYCLES_BACKEND, 0, sizeof(struct perf_event_attr));
+		pe_STALLED_CYCLES_BACKEND.type = PERF_TYPE_HARDWARE; // 使用硬件缓存事件类型
+		pe_STALLED_CYCLES_BACKEND.size = sizeof(struct perf_event_attr);
+		pe_STALLED_CYCLES_BACKEND.config = PERF_COUNT_HW_STALLED_CYCLES_BACKEND;
+		pe_STALLED_CYCLES_BACKEND.exclude_kernel = 1;
+		pe_STALLED_CYCLES_BACKEND.pinned = 1;
+		// pe_llc_write_acc.exclude_idle = 1;
+		// pe_llc_write_acc.exclude_hv = 1;
+
+		memset(&pe_CPU_REF_CYCLES, 0, sizeof(struct perf_event_attr));
+		pe_CPU_REF_CYCLES.type = PERF_TYPE_HARDWARE; // 使用硬件缓存事件类型
+		pe_CPU_REF_CYCLES.size = sizeof(struct perf_event_attr);
+		pe_CPU_REF_CYCLES.config = PERF_COUNT_HW_REF_CPU_CYCLES;
+		pe_CPU_REF_CYCLES.exclude_kernel = 1;
+		pe_CPU_REF_CYCLES.pinned = 1;
+		// pe_llc_write_acc.exclude_idle = 1;
+		// pe_llc_write_acc.exclude_hv = 1;
+
+		memset(&pe_CPU_CYCLES, 0, sizeof(struct perf_event_attr));
+		pe_CPU_CYCLES.type = PERF_TYPE_HARDWARE; // 使用硬件缓存事件类型
+		pe_CPU_CYCLES.size = sizeof(struct perf_event_attr);
+		pe_CPU_CYCLES.config = PERF_COUNT_HW_CPU_CYCLES;
+		pe_CPU_CYCLES.exclude_kernel = 1;
+		pe_CPU_CYCLES.pinned = 1;
+		// pe_llc_write_acc.exclude_idle = 1;
+		// pe_llc_write_acc.exclude_hv = 1;
+
+		memset(&pe_BUS_CYCLES, 0, sizeof(struct perf_event_attr));
+		pe_BUS_CYCLES.type = PERF_TYPE_HARDWARE; // 使用硬件缓存事件类型
+		pe_BUS_CYCLES.size = sizeof(struct perf_event_attr);
+		pe_BUS_CYCLES.config = PERF_COUNT_HW_BUS_CYCLES;
+		pe_BUS_CYCLES.exclude_kernel = 1;
+		pe_BUS_CYCLES.pinned = 1;
+		// pe_llc_write_acc.exclude_idle = 1;
+		// pe_llc_write_acc.exclude_hv = 1;
 
 		memset(&pe_llc_cache_write_miss, 0, sizeof(struct perf_event_attr));
 		pe_llc_cache_write_miss.type = PERF_TYPE_HW_CACHE; // 使用硬件缓存事件类型
@@ -207,12 +262,17 @@ status_t primitive_execute(
 		int fd_l1_w_acc = (verbose_more_setting!=more_info_settings::L1D_Info)?(-1):(syscall(__NR_perf_event_open, &pe_l1_cache_write_acc, pid, -1, -1, 0));
 		int fd_l1_r_miss = (verbose_more_setting!=more_info_settings::L1D_Info)?(-1):(syscall(__NR_perf_event_open, &pe_l1_cache_read_miss, pid, -1, -1, 0));
 		int fd_l1_r_acc = (verbose_more_setting!=more_info_settings::L1D_Info)?(-1):(syscall(__NR_perf_event_open, &pe_l1_cache_read_acc, pid, -1, -1, 0));
+		int fd_cpu_ref_cycle = (verbose_more_setting!=more_info_settings::Cycles_Info)?(-1):(syscall(__NR_perf_event_open, &pe_CPU_REF_CYCLES, pid, -1, -1, 0));
+		int fd_cpu_cycle = (verbose_more_setting!=more_info_settings::Cycles_Info)?(-1):(syscall(__NR_perf_event_open, &pe_CPU_CYCLES, pid, -1, -1, 0));
+		int fd_bus_cycle = (verbose_more_setting!=more_info_settings::Cycles_Info)?(-1):(syscall(__NR_perf_event_open, &pe_BUS_CYCLES, pid, -1, -1, 0));
+		int fd_stall_frontend_cycle = (verbose_more_setting!=more_info_settings::Cycles_Info)?(-1):(syscall(__NR_perf_event_open, &pe_STALLED_CYCLES_FRONTEND, pid, -1, -1, 0));
+		int fd_stall_backtend_cycle = (verbose_more_setting!=more_info_settings::Cycles_Info)?(-1):(syscall(__NR_perf_event_open, &pe_STALLED_CYCLES_BACKEND, pid, -1, -1, 0));
 
         double start_ms = get_msec();
         status = stream->enqueue_primitive(primitive_iface, ctx);
         stream->wait();
         double duration_ms = get_msec() - start_ms;
-		unsigned long count[10];
+		unsigned long count[20];
 		(verbose_more_setting!=more_info_settings::LLC_W_Info)?(-1):read(fd_llc_w_miss, &count[2], sizeof(unsigned long));
 		(verbose_more_setting!=more_info_settings::LLC_W_Info)?(-1):read(fd_llc_w_acc, &count[3], sizeof(unsigned long));
 		(verbose_more_setting!=more_info_settings::LLC_R_Info)?(-1):read(fd_llc_r_miss, &count[4], sizeof(unsigned long));
@@ -221,6 +281,12 @@ status_t primitive_execute(
 		(verbose_more_setting!=more_info_settings::L1D_Info)?(-1):read(fd_l1_r_miss, &count[8], sizeof(unsigned long));
 		(verbose_more_setting!=more_info_settings::L1D_Info)?(-1):read(fd_l1_r_acc, &count[9], sizeof(unsigned long));
 		
+		(verbose_more_setting!=more_info_settings::Cycles_Info)?(-1):read(fd_cpu_ref_cycle, &count[14], sizeof(unsigned long));
+		(verbose_more_setting!=more_info_settings::Cycles_Info)?(-1):read(fd_cpu_cycle, &count[15], sizeof(unsigned long));
+		(verbose_more_setting!=more_info_settings::Cycles_Info)?(-1):read(fd_bus_cycle, &count[17], sizeof(unsigned long));
+		(verbose_more_setting!=more_info_settings::Cycles_Info)?(-1):read(fd_stall_frontend_cycle, &count[18], sizeof(unsigned long));
+		(verbose_more_setting!=more_info_settings::Cycles_Info)?(-1):read(fd_stall_backtend_cycle, &count[19], sizeof(unsigned long));
+		
 		(verbose_more_setting!=more_info_settings::LLC_W_Info)?(-1):printf("LLC hw_cache write misses: %'lu\n", count[2]);
 		(verbose_more_setting!=more_info_settings::LLC_W_Info)?(-1):printf("LLC hw_cache write acc: %'lu\n", count[3]);
 		(verbose_more_setting!=more_info_settings::LLC_R_Info)?(-1):printf("LLC hw_cache read misses: %'lu\n", count[4]);
@@ -228,6 +294,12 @@ status_t primitive_execute(
 		(verbose_more_setting!=more_info_settings::L1D_Info)?(-1):printf("L1 hw_l1cache write acc: %'lu\n", count[7]);
 		(verbose_more_setting!=more_info_settings::L1D_Info)?(-1):printf("L1 hw_l1cache read misses: %'lu\n", count[8]);
 		(verbose_more_setting!=more_info_settings::L1D_Info)?(-1):printf("L1 hw_l1cache read acc: %'lu\n", count[9]);
+
+		(verbose_more_setting!=more_info_settings::Cycles_Info)?(-1):printf("cpu_ref_cycle: %'lu\n", count[14]);
+		(verbose_more_setting!=more_info_settings::Cycles_Info)?(-1):printf("cpu_cycle: %'lu\n", count[15]);
+		(verbose_more_setting!=more_info_settings::Cycles_Info)?(-1):printf("bus_cycle: %'lu\n", count[17]);
+		(verbose_more_setting!=more_info_settings::Cycles_Info)?(-1):printf("stall_frontend_cycle: %'lu\n", count[18]);
+		(verbose_more_setting!=more_info_settings::Cycles_Info)?(-1):printf("stall_backtend_cycle: %'lu\n", count[19]);
 		
 		(verbose_more_setting!=more_info_settings::LLC_W_Info)?(-1):printf("LLC hw_cache write_miss ratio: %lf\n", ((count[3]==0)?(1.0):(1.0*count[2])/count[3]));
 		(verbose_more_setting!=more_info_settings::LLC_R_Info)?(-1):printf("LLC hw_cache read_miss ratio: %lf\n", (count[5]==0)?(1.0):((1.0*count[4])/count[5]));
