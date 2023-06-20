@@ -97,6 +97,51 @@ status_t primitive_execute(
 
     if (verbose_has_exec_profile()) {
         stream->wait();
+		//todo: add cpu_affinity
+		static std::string verbose_affinity_env = getenv_string_user("VERBOSE_AFFINITY");
+		// printf("verbose_affinity_env is %s\n", verbose_affinity_env.c_str());
+		//conv(x)_other(y)
+		if (verbose_affinity_env == "y")
+		{
+			static std::string conv_cpuid_env = getenv_string_user("VERBOSE_AFFINITY_CONV_CPUID");
+			static std::string other_cpuid_env = getenv_string_user("VERBOSE_AFFINITY_OTHER_CPUID");
+			int conv_cpuid = std::stoi(conv_cpuid_env);
+			int other_cpuid = std::stoi(other_cpuid_env);
+			if (primitive_iface->pd()->impl()->kind() == primitive_kind::convolution)
+			{
+				cpu_set_t mask;
+				CPU_ZERO(&mask);
+				CPU_SET(conv_cpuid, &mask);
+				int cpuid = sched_getcpu();
+				sched_setaffinity(0, sizeof(mask), &mask);
+				while(1)
+				{
+					int tmp_cpuid = sched_getcpu();
+					if (tmp_cpuid == conv_cpuid)
+					{
+						printf("conv_primitive cpuid is changed from %d to %d\n", cpuid, conv_cpuid);
+						break;
+					}
+				}				
+			}
+			else
+			{
+				cpu_set_t mask;
+				CPU_ZERO(&mask);
+				CPU_SET(other_cpuid, &mask);
+				int cpuid = sched_getcpu();
+				sched_setaffinity(0, sizeof(mask), &mask);
+				while(1)
+				{
+					int tmp_cpuid = sched_getcpu();
+					if (tmp_cpuid == other_cpuid)
+					{
+						printf("other_primitive cpuid is changed from %d to %d\n", cpuid, other_cpuid);
+						break;
+					}
+				}
+			}
+		}
         //todo: add cache perf
 		static std::string verbose_more_env = getenv_string_user("VERBOSE_MORE");
 		int verbose_more_setting = 0;
