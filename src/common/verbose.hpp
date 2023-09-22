@@ -122,6 +122,11 @@ struct const_expr_value {
         fflush(stdout); \
     }
 
+#define VPROF_YJP(stamp, logtype, logsubtype, info, duration, l1cache_write_acc_time, l1cache_read_miss_time, l1cache_read_acc_time, cpu_cycle_time) \
+    { \
+        VFORMAT(stamp, logtype, logsubtype, "%s,%g", info, duration,l1cache_write_acc_time, l1cache_read_miss_time, l1cache_read_acc_time, cpu_cycle_time); \
+        fflush(stdout); \
+    }
 struct verbose_t {
     enum flag_kind : int {
         // we reserve the 24 lower bits for user info

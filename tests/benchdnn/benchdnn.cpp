@@ -88,6 +88,41 @@ int main(int argc, char **argv) {
 
     if (parse_main_help(argv[0])) return 0;
 
+    // //get the env variable
+    // //ONEDNN_VERBOSE_AFFINITY_CONV_CPUID
+    // std::string env_conv_cpu_id = getenv("ONEDNN_VERBOSE_AFFINITY_CONV_CPUID");
+    // std::vector<int> conv_cpuid;
+    // std::istringstream ss(env_conv_cpu_id);
+    // std::string token;
+    // while (std::getline(ss, token, ',')) {
+    //     conv_cpuid.push_back(std::stoi(token));
+    // }
+    // //flush the core's cache
+    // const size_t bigger_than_cachesize = 10 * 1024 * 1024;
+    // long *p = new long[bigger_than_cachesize];
+    // // flush the peer conv_cpu cache
+    // cpu_set_t mask;
+    // for (int i = 0; i < conv_cpuid.size(); i++)
+    // {
+    //     CPU_ZERO(&mask);
+    //     CPU_SET(conv_cpuid[i], &mask);
+    //     sched_setaffinity(0, sizeof(mask), &mask);
+    //     int cpuid = sched_getcpu();
+    //     while(1)
+    //     {
+    //         int tmp_cpuid = sched_getcpu();
+    //         if (CPU_ISSET(tmp_cpuid, &mask))
+    //         {
+    //             for(int i = 0; i < bigger_than_cachesize; i++)
+    //             {
+    //                 p[i] = rand();
+    //             }
+    //             //print core flush is ok
+    //             printf("core %d flush is ok\n", tmp_cpuid);
+    //             break;
+    //         }
+    //     }
+    // }
     init_fp_mode();
 
     for (; argc > 0; --argc, ++argv)
@@ -145,12 +180,12 @@ int main(int argc, char **argv) {
         fprintf(stderr, "err: unknown driver\n");
     }
 
-    printf("tests:%d passed:%d skipped:%d mistrusted:%d unimplemented:%d "
-           "invalid_arguments:%d failed:%d listed:%d\n",
-            benchdnn_stat.tests, benchdnn_stat.passed, benchdnn_stat.skipped,
-            benchdnn_stat.mistrusted, benchdnn_stat.unimplemented,
-            benchdnn_stat.invalid_arguments, benchdnn_stat.failed,
-            benchdnn_stat.listed);
+    // printf("tests:%d passed:%d skipped:%d mistrusted:%d unimplemented:%d "
+    //        "invalid_arguments:%d failed:%d listed:%d\n",
+    //         benchdnn_stat.tests, benchdnn_stat.passed, benchdnn_stat.skipped,
+    //         benchdnn_stat.mistrusted, benchdnn_stat.unimplemented,
+    //         benchdnn_stat.invalid_arguments, benchdnn_stat.failed,
+    //         benchdnn_stat.listed);
     if (has_bench_mode_bit(mode_bit_t::perf)) {
         const auto &perf_timer
                 = benchdnn_stat.ms.find(timer::names::perf_timer);

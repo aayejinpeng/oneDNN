@@ -141,12 +141,16 @@ int bench(int argc, char **argv) {
             SAFE(str2desc(&s.desc, argv[0]), CRIT);
 
             SAFE(verify_input(s), WARN);
+            // printf("\naha!\n");
             check_correctness(s, task_executor);
+            // printf("\nawa!\n");
         }
     }
-
+    // fflush(std);
+    fflush(stdout);
+    // printf("aha!\n");
     task_executor.flush();
-
+    // printf("awa!\n");
     return parse_last_argument();
 }
 

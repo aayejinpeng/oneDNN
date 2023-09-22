@@ -119,7 +119,7 @@ status_t primitive_execute(
 					int tmp_cpuid = sched_getcpu();
 					if (tmp_cpuid == conv_cpuid)
 					{
-						printf("conv_primitive cpuid is changed from %d to %d\n", cpuid, conv_cpuid);
+						// printf("conv_primitive cpuid is changed from %d to %d\n", cpuid, conv_cpuid);
 						break;
 					}
 				}				
@@ -136,238 +136,406 @@ status_t primitive_execute(
 					int tmp_cpuid = sched_getcpu();
 					if (tmp_cpuid == other_cpuid)
 					{
-						printf("other_primitive cpuid is changed from %d to %d\n", cpuid, other_cpuid);
+						// printf("other_primitive cpuid is changed from %d to %d\n", cpuid, other_cpuid);
 						break;
 					}
 				}
 			}
+		}else if (verbose_affinity_env == "yy")
+		{
+			static std::string conv_cpuid_env = getenv_string_user("VERBOSE_AFFINITY_CONV_CPUID");
+			static std::string other_cpuid_env = getenv_string_user("VERBOSE_AFFINITY_OTHER_CPUID");
+		    std::vector<int> conv_cpuid;
+			std::vector<int> other_cpuid;
+            std::istringstream ss(conv_cpuid_env);
+            std::string token;
+            while (std::getline(ss, token, ',')) {
+                conv_cpuid.push_back(std::stoi(token));
+            }
+            std::istringstream ss2(other_cpuid_env);
+            std::string token2;
+            while (std::getline(ss2, token2, ',')) {
+                other_cpuid.push_back(std::stoi(token2));
+            }
+            
+			if (primitive_iface->pd()->impl()->kind() == primitive_kind::convolution)
+			{
+				cpu_set_t mask;
+				CPU_ZERO(&mask);
+                for (int i = 0; i < conv_cpuid.size(); i++)
+                {
+                    CPU_SET(conv_cpuid[i], &mask);
+                }
+				int cpuid = sched_getcpu();
+				sched_setaffinity(0, sizeof(mask), &mask);
+				while(1)
+				{
+					int tmp_cpuid = sched_getcpu();
+					if (CPU_ISSET(tmp_cpuid, &mask))
+                    {
+                        // printf("conv_primitive cpuid is changed from %d to %d\n", cpuid, tmp_cpuid);
+                        break;
+                    }
+				}
+			}
+			else
+			{
+				cpu_set_t mask;
+				CPU_ZERO(&mask);
+                for (int i = 0; i < other_cpuid.size(); i++)
+                {
+                    CPU_SET(other_cpuid[i], &mask);
+                }
+				int cpuid = sched_getcpu();
+				sched_setaffinity(0, sizeof(mask), &mask);
+				while(1)
+				{
+					int tmp_cpuid = sched_getcpu();
+					if (CPU_ISSET(tmp_cpuid, &mask))
+                    {
+                        // printf("other_primitive cpuid is changed from %d to %d\n", cpuid, tmp_cpuid);
+                        break;
+                    }
+				}
+			}
 		}
+        
         //todo: add cache perf
 		static std::string verbose_more_env = getenv_string_user("VERBOSE_MORE");
-		int verbose_more_setting = 0;
-		enum more_info_settings : int {
-			No_info = 0,
-			LLC_W_Info = 1,
-			LLC_R_Info = 2,
-			L1D_Info = 10,
-			Cycles_Info = 100,
-			Cycles_stall_Info = 101
-		};
-		if (verbose_more_env == "llc_w_info")
-		{
-			verbose_more_setting = more_info_settings::LLC_W_Info;
-		}
-		else if (verbose_more_env == "llc_r_info")
-		{
-			verbose_more_setting = more_info_settings::LLC_R_Info;
-		}
-		else if (verbose_more_env == "l1d_info")
-		{
-			verbose_more_setting = more_info_settings::L1D_Info;
-		}
-		else if (verbose_more_env == "cycles_info")
-		{
-			verbose_more_setting = more_info_settings::Cycles_Info;
-		}
-		else if (verbose_more_env == "cycles_stall_info")
-		{
-			verbose_more_setting = more_info_settings::Cycles_stall_Info;
-		}
-		else
-		{
-			// printf("verbose_more_env.length = %d\nverbose_more_env = %s\n",verbose_more_env.length(),verbose_more_env.c_str());
-			verbose_more_setting = more_info_settings::No_info;
-		}
+                if (verbose_more_env == "perf_info")
+        {
+            static std::string perf_info_loop = getenv_string_user("LOOP");
+            struct perf_event_attr pe_l1_cache_write_acc;
+		    struct perf_event_attr pe_l1_cache_read_acc;
+            struct perf_event_attr pe_l1_cache_read_miss;
+            struct perf_event_attr pe_CPU_CYCLES;
 
-		struct perf_event_attr pe_llc_cache_write_acc;
-		struct perf_event_attr pe_llc_cache_write_miss;
-		struct perf_event_attr pe_llc_cache_read_acc;
-		struct perf_event_attr pe_llc_cache_read_miss;
-		struct perf_event_attr pe_l1_cache_write_acc;
-		struct perf_event_attr pe_l1_cache_read_acc;
-		struct perf_event_attr pe_l1_cache_read_miss;
-		struct perf_event_attr pe_CPU_REF_CYCLES;
-		struct perf_event_attr pe_CPU_CYCLES;
-		struct perf_event_attr pe_BUS_CYCLES;
-		struct perf_event_attr pe_STALLED_CYCLES_FRONTEND;
-		struct perf_event_attr pe_STALLED_CYCLES_BACKEND;
+            memset(&pe_CPU_CYCLES, 0, sizeof(struct perf_event_attr));
+            pe_CPU_CYCLES.type = PERF_TYPE_HARDWARE; // 使用硬件缓存事件类型
+            pe_CPU_CYCLES.size = sizeof(struct perf_event_attr);
+            pe_CPU_CYCLES.config = PERF_COUNT_HW_CPU_CYCLES;
+            pe_CPU_CYCLES.exclude_kernel = 1;
+            pe_CPU_CYCLES.pinned = 1;
+            pe_CPU_CYCLES.exclude_idle = 1;
+            pe_CPU_CYCLES.exclude_hv = 1;
+            // pe_CPU_CYCLES.inherit = 1;
+            // pe_CPU_CYCLES.inherit_stat = 1;
+            //write read miss time
+            //52622,3971893,51064,3837357 1core
+            //31302,2217995,41871,2165214 2core
+            //52622,3971891,44767,3697911 1core 
 
-		memset(&pe_STALLED_CYCLES_FRONTEND, 0, sizeof(struct perf_event_attr));
-		pe_STALLED_CYCLES_FRONTEND.type = PERF_TYPE_HARDWARE; // 使用硬件缓存事件类型
-		pe_STALLED_CYCLES_FRONTEND.size = sizeof(struct perf_event_attr);
-		pe_STALLED_CYCLES_FRONTEND.config = PERF_COUNT_HW_STALLED_CYCLES_FRONTEND;
-		pe_STALLED_CYCLES_FRONTEND.exclude_kernel = 1;
-		pe_STALLED_CYCLES_FRONTEND.pinned = 1;
-		// pe_llc_write_acc.exclude_idle = 1;
-		// pe_llc_write_acc.exclude_hv = 1;
 
-		memset(&pe_STALLED_CYCLES_BACKEND, 0, sizeof(struct perf_event_attr));
-		pe_STALLED_CYCLES_BACKEND.type = PERF_TYPE_HARDWARE; // 使用硬件缓存事件类型
-		pe_STALLED_CYCLES_BACKEND.size = sizeof(struct perf_event_attr);
-		pe_STALLED_CYCLES_BACKEND.config = PERF_COUNT_HW_STALLED_CYCLES_BACKEND;
-		pe_STALLED_CYCLES_BACKEND.exclude_kernel = 1;
-		pe_STALLED_CYCLES_BACKEND.pinned = 1;
-		// pe_llc_write_acc.exclude_idle = 1;
-		// pe_llc_write_acc.exclude_hv = 1;
+            memset(&pe_l1_cache_write_acc, 0, sizeof(struct perf_event_attr));
+            pe_l1_cache_write_acc.type = PERF_TYPE_HW_CACHE; // 使用硬件缓存事件类型
+            pe_l1_cache_write_acc.size = sizeof(struct perf_event_attr);
+            pe_l1_cache_write_acc.config = (PERF_COUNT_HW_CACHE_L1D) | (PERF_COUNT_HW_CACHE_OP_WRITE << 8) | (PERF_COUNT_HW_CACHE_RESULT_ACCESS << 16);
+            pe_l1_cache_write_acc.exclude_kernel = 1;
+            pe_l1_cache_write_acc.pinned = 1;
+            pe_l1_cache_write_acc.exclude_idle = 1;
+            pe_l1_cache_write_acc.exclude_hv = 1;
+            // pe_l1_cache_write_acc.inherit = 1;
+            // pe_l1_cache_write_acc.inherit_stat = 1;
 
-		memset(&pe_CPU_REF_CYCLES, 0, sizeof(struct perf_event_attr));
-		pe_CPU_REF_CYCLES.type = PERF_TYPE_HARDWARE; // 使用硬件缓存事件类型
-		pe_CPU_REF_CYCLES.size = sizeof(struct perf_event_attr);
-		pe_CPU_REF_CYCLES.config = PERF_COUNT_HW_REF_CPU_CYCLES;
-		pe_CPU_REF_CYCLES.exclude_kernel = 1;
-		pe_CPU_REF_CYCLES.pinned = 1;
-		// pe_llc_write_acc.exclude_idle = 1;
-		// pe_llc_write_acc.exclude_hv = 1;
+            memset(&pe_l1_cache_read_miss, 0, sizeof(struct perf_event_attr));
+            pe_l1_cache_read_miss.type = PERF_TYPE_HW_CACHE; // 使用硬件缓存事件类型
+            pe_l1_cache_read_miss.size = sizeof(struct perf_event_attr);
+            pe_l1_cache_read_miss.config = (PERF_COUNT_HW_CACHE_L1D) | (PERF_COUNT_HW_CACHE_OP_READ << 8) | (PERF_COUNT_HW_CACHE_RESULT_MISS << 16);
+            pe_l1_cache_read_miss.exclude_kernel = 1;
+            pe_l1_cache_read_miss.pinned = 1;
+            pe_l1_cache_read_miss.exclude_idle = 1;
+            pe_l1_cache_read_miss.exclude_hv = 1;
 
-		memset(&pe_CPU_CYCLES, 0, sizeof(struct perf_event_attr));
-		pe_CPU_CYCLES.type = PERF_TYPE_HARDWARE; // 使用硬件缓存事件类型
-		pe_CPU_CYCLES.size = sizeof(struct perf_event_attr);
-		pe_CPU_CYCLES.config = PERF_COUNT_HW_CPU_CYCLES;
-		pe_CPU_CYCLES.exclude_kernel = 1;
-		pe_CPU_CYCLES.pinned = 1;
-		// pe_llc_write_acc.exclude_idle = 1;
-		// pe_llc_write_acc.exclude_hv = 1;
+            memset(&pe_l1_cache_read_acc, 0, sizeof(struct perf_event_attr));
+            pe_l1_cache_read_acc.type = PERF_TYPE_HW_CACHE; // 使用硬件缓存事件类型
+            pe_l1_cache_read_acc.size = sizeof(struct perf_event_attr);
+            pe_l1_cache_read_acc.config = (PERF_COUNT_HW_CACHE_L1D) | (PERF_COUNT_HW_CACHE_OP_READ << 8) | (PERF_COUNT_HW_CACHE_RESULT_ACCESS << 16);
+            pe_l1_cache_read_acc.exclude_kernel = 1;
+            pe_l1_cache_read_acc.pinned = 1;
+            pe_l1_cache_read_acc.exclude_idle = 1;
+            pe_l1_cache_read_acc.exclude_hv = 1;
+            pid_t pid = getpid();
+            int fd_l1_w_acc = syscall(__NR_perf_event_open, &pe_l1_cache_write_acc, pid, -1, -1, 0);
+            int fd_l1_r_miss = syscall(__NR_perf_event_open, &pe_l1_cache_read_miss, pid, -1, -1, 0);
+            int fd_l1_r_acc = syscall(__NR_perf_event_open, &pe_l1_cache_read_acc, pid, -1, -1, 0);
+            int fd_cpu_cycle = syscall(__NR_perf_event_open, &pe_CPU_CYCLES, pid, -1, -1, 0);
 
-		memset(&pe_BUS_CYCLES, 0, sizeof(struct perf_event_attr));
-		pe_BUS_CYCLES.type = PERF_TYPE_HARDWARE; // 使用硬件缓存事件类型
-		pe_BUS_CYCLES.size = sizeof(struct perf_event_attr);
-		pe_BUS_CYCLES.config = PERF_COUNT_HW_BUS_CYCLES;
-		pe_BUS_CYCLES.exclude_kernel = 1;
-		pe_BUS_CYCLES.pinned = 1;
-		// pe_llc_write_acc.exclude_idle = 1;
-		// pe_llc_write_acc.exclude_hv = 1;
+            double start_ms = get_msec();
+            status = stream->enqueue_primitive(primitive_iface, ctx);
+            stream->wait();
+            double duration_ms = get_msec() - start_ms;
+            unsigned long count[20];
+            read(fd_l1_w_acc, &count[7], sizeof(unsigned long));
+            read(fd_l1_r_miss, &count[8], sizeof(unsigned long));
+            read(fd_l1_r_acc, &count[9], sizeof(unsigned long));
 
-		memset(&pe_llc_cache_write_miss, 0, sizeof(struct perf_event_attr));
-		pe_llc_cache_write_miss.type = PERF_TYPE_HW_CACHE; // 使用硬件缓存事件类型
-		pe_llc_cache_write_miss.size = sizeof(struct perf_event_attr);
-		pe_llc_cache_write_miss.config = (PERF_COUNT_HW_CACHE_LL) | (PERF_COUNT_HW_CACHE_OP_WRITE << 8) | (PERF_COUNT_HW_CACHE_RESULT_ACCESS << 16);
-		pe_llc_cache_write_miss.exclude_kernel = 1;
-		pe_llc_cache_write_miss.pinned = 1;
-		// pe_llc_write_acc.exclude_idle = 1;
-		// pe_llc_write_acc.exclude_hv = 1;
+            read(fd_cpu_cycle, &count[15], sizeof(unsigned long));
 
-		memset(&pe_llc_cache_write_acc, 0, sizeof(struct perf_event_attr));
-		pe_llc_cache_write_acc.type = PERF_TYPE_HW_CACHE; // 使用硬件缓存事件类型
-		pe_llc_cache_write_acc.size = sizeof(struct perf_event_attr);
-		pe_llc_cache_write_acc.config = (PERF_COUNT_HW_CACHE_LL) | (PERF_COUNT_HW_CACHE_OP_WRITE << 8) | (PERF_COUNT_HW_CACHE_RESULT_ACCESS << 16);
-		pe_llc_cache_write_acc.exclude_kernel = 1;
-		pe_llc_cache_write_acc.pinned = 1;
-		// pe_llc_write_acc.exclude_idle = 1;
-		// pe_llc_write_acc.exclude_hv = 1;
+            // printf("L1 hw_l1cache write acc: %'lu\n", count[7]);
+            // printf("L1 hw_l1cache read misses: %'lu\n", count[8]);
+            // printf("L1 hw_l1cache read acc: %'lu\n", count[9]);
 
-		memset(&pe_llc_cache_read_miss, 0, sizeof(struct perf_event_attr));
-		pe_llc_cache_read_miss.type = PERF_TYPE_HW_CACHE; // 使用硬件缓存事件类型
-		pe_llc_cache_read_miss.size = sizeof(struct perf_event_attr);
-		pe_llc_cache_read_miss.config = (PERF_COUNT_HW_CACHE_LL) | (PERF_COUNT_HW_CACHE_OP_READ << 8) | (PERF_COUNT_HW_CACHE_RESULT_MISS << 16);
-		pe_llc_cache_read_miss.exclude_kernel = 1;
-		pe_llc_cache_read_miss.pinned = 1;
-		// pe_llc_write_miss.exclude_idle = 1;
-		// pe_llc_write_miss.exclude_hv = 1;
+            // printf("cpu_cycle: %'lu\n", count[15]);
 
-		memset(&pe_llc_cache_read_acc, 0, sizeof(struct perf_event_attr));
-		pe_llc_cache_read_acc.type = PERF_TYPE_HW_CACHE; // 使用硬件缓存事件类型
-		pe_llc_cache_read_acc.size = sizeof(struct perf_event_attr);
-		pe_llc_cache_read_acc.config = (PERF_COUNT_HW_CACHE_LL) | (PERF_COUNT_HW_CACHE_OP_READ << 8) | (PERF_COUNT_HW_CACHE_RESULT_ACCESS << 16);
-		pe_llc_cache_read_acc.exclude_kernel = 1;
-		pe_llc_cache_read_acc.pinned = 1;
-		// pe_llc_write_acc.exclude_idle = 1;
-		// pe_llc_write_acc.exclude_hv = 1;
+            // printf("L1 hw_l1cache read/write ratio: r%lf:w%lf\n", (count[9]+count[7]==0)?(1.0):(1.0*count[9])/(count[9]+count[7]),(1.0*count[7])/(count[9]+count[7]));
+            // printf("L1 hw_l1cache read_miss ratio: %lf\n", (count[9]==0)?(1.0):((1.0*count[8])/count[9]));
+            // printf("L1 hw_l1cache read_miss(write alloc) ratio: %lf\n", (count[9]==0)?(1.0):((1.0*count[8])/(count[9]+count[7])));
 
-		memset(&pe_l1_cache_write_acc, 0, sizeof(struct perf_event_attr));
-		pe_l1_cache_write_acc.type = PERF_TYPE_HW_CACHE; // 使用硬件缓存事件类型
-		pe_l1_cache_write_acc.size = sizeof(struct perf_event_attr);
-		pe_l1_cache_write_acc.config = (PERF_COUNT_HW_CACHE_L1D) | (PERF_COUNT_HW_CACHE_OP_WRITE << 8) | (PERF_COUNT_HW_CACHE_RESULT_ACCESS << 16);
-		pe_l1_cache_write_acc.exclude_kernel = 1;
-		pe_l1_cache_write_acc.pinned = 1;
-		// pe_llc_write_acc.exclude_idle = 1;
-		// pe_llc_write_acc.exclude_hv = 1;
+            close(fd_l1_w_acc);
+            close(fd_l1_r_miss);
+            close(fd_l1_r_acc);
+            close(fd_cpu_cycle);
+            unsigned long l1cache_write_acc_time = count[7];
+            unsigned long l1cache_read_miss_time = count[8];
+            unsigned long l1cache_read_acc_time = count[9];
+            unsigned long cpu_cycle_time = count[15];
 
-		memset(&pe_l1_cache_read_miss, 0, sizeof(struct perf_event_attr));
-		pe_l1_cache_read_miss.type = PERF_TYPE_HW_CACHE; // 使用硬件缓存事件类型
-		pe_l1_cache_read_miss.size = sizeof(struct perf_event_attr);
-		pe_l1_cache_read_miss.config = (PERF_COUNT_HW_CACHE_L1D) | (PERF_COUNT_HW_CACHE_OP_READ << 8) | (PERF_COUNT_HW_CACHE_RESULT_MISS << 16);
-		pe_l1_cache_read_miss.exclude_kernel = 1;
-		pe_l1_cache_read_miss.pinned = 1;
-		// pe_llc_write_miss.exclude_idle = 1;
-		// pe_llc_write_miss.exclude_hv = 1;
+            // VPROF(start_ms, exec, VERBOSE_profile, primitive_iface->pd()->info(),
+            //         duration_ms);
 
-		memset(&pe_l1_cache_read_acc, 0, sizeof(struct perf_event_attr));
-		pe_l1_cache_read_acc.type = PERF_TYPE_HW_CACHE; // 使用硬件缓存事件类型
-		pe_l1_cache_read_acc.size = sizeof(struct perf_event_attr);
-		pe_l1_cache_read_acc.config = (PERF_COUNT_HW_CACHE_L1D) | (PERF_COUNT_HW_CACHE_OP_READ << 8) | (PERF_COUNT_HW_CACHE_RESULT_ACCESS << 16);
-		pe_l1_cache_read_acc.exclude_kernel = 1;
-		pe_l1_cache_read_acc.pinned = 1;
-		// pe_llc_write_acc.exclude_idle = 1;
-		// pe_llc_write_acc.exclude_hv = 1;
-		pid_t pid = getpid();
-		int fd_llc_w_miss = (verbose_more_setting!=more_info_settings::LLC_W_Info)?(-1):(syscall(__NR_perf_event_open, &pe_llc_cache_write_miss, pid, -1, -1, 0));
-		int fd_llc_w_acc = (verbose_more_setting!=more_info_settings::LLC_W_Info)?(-1):(syscall(__NR_perf_event_open, &pe_llc_cache_write_acc, pid, -1, -1, 0));
-		int fd_llc_r_miss = (verbose_more_setting!=more_info_settings::LLC_R_Info)?(-1):(syscall(__NR_perf_event_open, &pe_llc_cache_read_miss, pid, -1, -1, 0));
-		int fd_llc_r_acc = (verbose_more_setting!=more_info_settings::LLC_R_Info)?(-1):(syscall(__NR_perf_event_open, &pe_llc_cache_read_acc, pid, -1, -1, 0));
-		int fd_l1_w_acc = (verbose_more_setting!=more_info_settings::L1D_Info)?(-1):(syscall(__NR_perf_event_open, &pe_l1_cache_write_acc, pid, -1, -1, 0));
-		int fd_l1_r_miss = (verbose_more_setting!=more_info_settings::L1D_Info)?(-1):(syscall(__NR_perf_event_open, &pe_l1_cache_read_miss, pid, -1, -1, 0));
-		int fd_l1_r_acc = (verbose_more_setting!=more_info_settings::L1D_Info)?(-1):(syscall(__NR_perf_event_open, &pe_l1_cache_read_acc, pid, -1, -1, 0));
-		int fd_cpu_ref_cycle = (verbose_more_setting!=more_info_settings::Cycles_Info)?(-1):(syscall(__NR_perf_event_open, &pe_CPU_REF_CYCLES, pid, -1, -1, 0));
-		int fd_cpu_cycle = (verbose_more_setting!=more_info_settings::Cycles_Info)?(-1):(syscall(__NR_perf_event_open, &pe_CPU_CYCLES, pid, -1, -1, 0));
-		int fd_bus_cycle = (verbose_more_setting!=more_info_settings::Cycles_Info)?(-1):(syscall(__NR_perf_event_open, &pe_BUS_CYCLES, pid, -1, -1, 0));
-		int fd_stall_frontend_cycle = (verbose_more_setting!=more_info_settings::Cycles_stall_Info)?(-1):(syscall(__NR_perf_event_open, &pe_STALLED_CYCLES_FRONTEND, pid, -1, -1, 0));
-		int fd_stall_backtend_cycle = (verbose_more_setting!=more_info_settings::Cycles_stall_Info)?(-1):(syscall(__NR_perf_event_open, &pe_STALLED_CYCLES_BACKEND, pid, -1, -1, 0));
+            // VPROF_YJP(start_ms, exec, VERBOSE_profile, primitive_iface->pd()->info(),
+            //         duration_ms, l1cache_write_acc_time, l1cache_read_miss_time, l1cache_read_acc_time, cpu_cycle_time);
+            std::vector<std::string> result;
+            std::istringstream ss(primitive_iface->pd()->info());
+            std::string token;
 
-        double start_ms = get_msec();
-        status = stream->enqueue_primitive(primitive_iface, ctx);
-        stream->wait();
-        double duration_ms = get_msec() - start_ms;
-		unsigned long count[20];
-		(verbose_more_setting!=more_info_settings::LLC_W_Info)?(-1):read(fd_llc_w_miss, &count[2], sizeof(unsigned long));
-		(verbose_more_setting!=more_info_settings::LLC_W_Info)?(-1):read(fd_llc_w_acc, &count[3], sizeof(unsigned long));
-		(verbose_more_setting!=more_info_settings::LLC_R_Info)?(-1):read(fd_llc_r_miss, &count[4], sizeof(unsigned long));
-		(verbose_more_setting!=more_info_settings::LLC_R_Info)?(-1):read(fd_llc_r_acc, &count[5], sizeof(unsigned long));
-		(verbose_more_setting!=more_info_settings::L1D_Info)?(-1):read(fd_l1_w_acc, &count[7], sizeof(unsigned long));
-		(verbose_more_setting!=more_info_settings::L1D_Info)?(-1):read(fd_l1_r_miss, &count[8], sizeof(unsigned long));
-		(verbose_more_setting!=more_info_settings::L1D_Info)?(-1):read(fd_l1_r_acc, &count[9], sizeof(unsigned long));
+            while (std::getline(ss, token, ',')) {
+                result.push_back(token);
+                // std::cout << token << std::endl;
+            }
 
-		(verbose_more_setting!=more_info_settings::Cycles_Info)?(-1):read(fd_cpu_ref_cycle, &count[14], sizeof(unsigned long));
-		(verbose_more_setting!=more_info_settings::Cycles_Info)?(-1):read(fd_cpu_cycle, &count[15], sizeof(unsigned long));
-		(verbose_more_setting!=more_info_settings::Cycles_Info)?(-1):read(fd_bus_cycle, &count[17], sizeof(unsigned long));
-		(verbose_more_setting!=more_info_settings::Cycles_stall_Info)?(-1):read(fd_stall_frontend_cycle, &count[18], sizeof(unsigned long));
-		(verbose_more_setting!=more_info_settings::Cycles_stall_Info)?(-1):read(fd_stall_backtend_cycle, &count[19], sizeof(unsigned long));
+            printf("%s,%s,%s,%s,%s,%g,%lu,%lu,%lu,%lu\n",perf_info_loop.c_str(),result[1].c_str(),result[2].c_str(),result[result.size()-2].c_str(),result[result.size()-1].c_str(),duration_ms,l1cache_write_acc_time,l1cache_read_acc_time,l1cache_read_miss_time,cpu_cycle_time);
+            // printf("%s,",primitive_iface->pd()->info());
+            fflush(stdout);
+            
+        }
+        else
+        {
+            int verbose_more_setting = 0;
+            enum more_info_settings : int {
+                No_info = 0,
+                LLC_W_Info = 1,
+                LLC_R_Info = 2,
+                L1D_Info = 10,
+                Cycles_Info = 100,
+                Cycles_stall_Info = 101
+            };
+            if (verbose_more_env == "llc_w_info")
+            {
+                verbose_more_setting = more_info_settings::LLC_W_Info;
+            }
+            else if (verbose_more_env == "llc_r_info")
+            {
+                verbose_more_setting = more_info_settings::LLC_R_Info;
+            }
+            else if (verbose_more_env == "l1d_info")
+            {
+                verbose_more_setting = more_info_settings::L1D_Info;
+            }
+            else if (verbose_more_env == "cycles_info")
+            {
+                verbose_more_setting = more_info_settings::Cycles_Info;
+            }
+            else if (verbose_more_env == "cycles_stall_info")
+            {
+                verbose_more_setting = more_info_settings::Cycles_stall_Info;
+            }
+            else
+            {
+                // printf("verbose_more_env.length = %d\nverbose_more_env = %s\n",verbose_more_env.length(),verbose_more_env.c_str());
+                verbose_more_setting = more_info_settings::No_info;
+            }
 
-		(verbose_more_setting!=more_info_settings::LLC_W_Info)?(-1):printf("LLC hw_cache write misses: %'lu\n", count[2]);
-		(verbose_more_setting!=more_info_settings::LLC_W_Info)?(-1):printf("LLC hw_cache write acc: %'lu\n", count[3]);
-		(verbose_more_setting!=more_info_settings::LLC_R_Info)?(-1):printf("LLC hw_cache read misses: %'lu\n", count[4]);
-		(verbose_more_setting!=more_info_settings::LLC_R_Info)?(-1):printf("LLC hw_cache read acc: %'lu\n", count[5]);
-		(verbose_more_setting!=more_info_settings::L1D_Info)?(-1):printf("L1 hw_l1cache write acc: %'lu\n", count[7]);
-		(verbose_more_setting!=more_info_settings::L1D_Info)?(-1):printf("L1 hw_l1cache read misses: %'lu\n", count[8]);
-		(verbose_more_setting!=more_info_settings::L1D_Info)?(-1):printf("L1 hw_l1cache read acc: %'lu\n", count[9]);
+            struct perf_event_attr pe_llc_cache_write_acc;
+            struct perf_event_attr pe_llc_cache_write_miss;
+            struct perf_event_attr pe_llc_cache_read_acc;
+            struct perf_event_attr pe_llc_cache_read_miss;
+            struct perf_event_attr pe_l1_cache_write_acc;
+            struct perf_event_attr pe_l1_cache_read_acc;
+            struct perf_event_attr pe_l1_cache_read_miss;
+            struct perf_event_attr pe_CPU_REF_CYCLES;
+            struct perf_event_attr pe_CPU_CYCLES;
+            struct perf_event_attr pe_BUS_CYCLES;
+            struct perf_event_attr pe_STALLED_CYCLES_FRONTEND;
+            struct perf_event_attr pe_STALLED_CYCLES_BACKEND;
 
-		(verbose_more_setting!=more_info_settings::Cycles_Info)?(-1):printf("cpu_ref_cycle: %'lu\n", count[14]);
-		(verbose_more_setting!=more_info_settings::Cycles_Info)?(-1):printf("cpu_cycle: %'lu\n", count[15]);
-		(verbose_more_setting!=more_info_settings::Cycles_Info)?(-1):printf("bus_cycle: %'lu\n", count[17]);
-		(verbose_more_setting!=more_info_settings::Cycles_stall_Info)?(-1):printf("stall_frontend_cycle: %'lu\n", count[18]);
-		(verbose_more_setting!=more_info_settings::Cycles_stall_Info)?(-1):printf("stall_backtend_cycle: %'lu\n", count[19]);
+            memset(&pe_STALLED_CYCLES_FRONTEND, 0, sizeof(struct perf_event_attr));
+            pe_STALLED_CYCLES_FRONTEND.type = PERF_TYPE_HARDWARE; // 使用硬件缓存事件类型
+            pe_STALLED_CYCLES_FRONTEND.size = sizeof(struct perf_event_attr);
+            pe_STALLED_CYCLES_FRONTEND.config = PERF_COUNT_HW_STALLED_CYCLES_FRONTEND;
+            pe_STALLED_CYCLES_FRONTEND.exclude_kernel = 1;
+            pe_STALLED_CYCLES_FRONTEND.pinned = 1;
+            // pe_llc_write_acc.exclude_idle = 1;
+            // pe_llc_write_acc.exclude_hv = 1;
 
-		(verbose_more_setting!=more_info_settings::LLC_W_Info)?(-1):printf("LLC hw_cache write_miss ratio: %lf\n", ((count[3]==0)?(1.0):(1.0*count[2])/count[3]));
-		(verbose_more_setting!=more_info_settings::LLC_R_Info)?(-1):printf("LLC hw_cache read_miss ratio: %lf\n", (count[5]==0)?(1.0):((1.0*count[4])/count[5]));
-		(verbose_more_setting!=more_info_settings::L1D_Info)?(-1):printf("L1 hw_l1cache read/write ratio: r%lf:w%lf\n", (count[9]+count[7]==0)?(1.0):(1.0*count[9])/(count[9]+count[7]),(1.0*count[7])/(count[9]+count[7]));
-		(verbose_more_setting!=more_info_settings::L1D_Info)?(-1):printf("L1 hw_l1cache read_miss ratio: %lf\n", (count[9]==0)?(1.0):((1.0*count[8])/count[9]));
-		(verbose_more_setting!=more_info_settings::L1D_Info)?(-1):printf("L1 hw_l1cache read_miss(write alloc) ratio: %lf\n", (count[9]==0)?(1.0):((1.0*count[8])/(count[9]+count[7])));
+            memset(&pe_STALLED_CYCLES_BACKEND, 0, sizeof(struct perf_event_attr));
+            pe_STALLED_CYCLES_BACKEND.type = PERF_TYPE_HARDWARE; // 使用硬件缓存事件类型
+            pe_STALLED_CYCLES_BACKEND.size = sizeof(struct perf_event_attr);
+            pe_STALLED_CYCLES_BACKEND.config = PERF_COUNT_HW_STALLED_CYCLES_BACKEND;
+            pe_STALLED_CYCLES_BACKEND.exclude_kernel = 1;
+            pe_STALLED_CYCLES_BACKEND.pinned = 1;
+            // pe_llc_write_acc.exclude_idle = 1;
+            // pe_llc_write_acc.exclude_hv = 1;
 
-		(verbose_more_setting!=more_info_settings::LLC_W_Info)?(-1):close(fd_llc_w_miss);
-		(verbose_more_setting!=more_info_settings::LLC_W_Info)?(-1):close(fd_llc_w_acc);
-		(verbose_more_setting!=more_info_settings::LLC_R_Info)?(-1):close(fd_llc_r_miss);
-		(verbose_more_setting!=more_info_settings::LLC_R_Info)?(-1):close(fd_llc_r_acc);
-		(verbose_more_setting!=more_info_settings::L1D_Info)?(-1):close(fd_l1_w_acc);
-		(verbose_more_setting!=more_info_settings::L1D_Info)?(-1):close(fd_l1_r_miss);
-		(verbose_more_setting!=more_info_settings::L1D_Info)?(-1):close(fd_l1_r_acc);
+            memset(&pe_CPU_REF_CYCLES, 0, sizeof(struct perf_event_attr));
+            pe_CPU_REF_CYCLES.type = PERF_TYPE_HARDWARE; // 使用硬件缓存事件类型
+            pe_CPU_REF_CYCLES.size = sizeof(struct perf_event_attr);
+            pe_CPU_REF_CYCLES.config = PERF_COUNT_HW_REF_CPU_CYCLES;
+            pe_CPU_REF_CYCLES.exclude_kernel = 1;
+            pe_CPU_REF_CYCLES.pinned = 1;
+            // pe_llc_write_acc.exclude_idle = 1;
+            // pe_llc_write_acc.exclude_hv = 1;
 
-		(verbose_more_setting!=more_info_settings::Cycles_Info)?(-1):close(fd_bus_cycle);
-		(verbose_more_setting!=more_info_settings::Cycles_Info)?(-1):close(fd_cpu_cycle);
-		(verbose_more_setting!=more_info_settings::Cycles_Info)?(-1):close(fd_cpu_ref_cycle);
-		(verbose_more_setting!=more_info_settings::Cycles_stall_Info)?(-1):close(fd_stall_frontend_cycle);
-		(verbose_more_setting!=more_info_settings::Cycles_stall_Info)?(-1):close(fd_stall_backtend_cycle);
-		
-        VPROF(start_ms, exec, VERBOSE_profile, primitive_iface->pd()->info(),
-                duration_ms);
+            memset(&pe_CPU_CYCLES, 0, sizeof(struct perf_event_attr));
+            pe_CPU_CYCLES.type = PERF_TYPE_HARDWARE; // 使用硬件缓存事件类型
+            pe_CPU_CYCLES.size = sizeof(struct perf_event_attr);
+            pe_CPU_CYCLES.config = PERF_COUNT_HW_CPU_CYCLES;
+            pe_CPU_CYCLES.exclude_kernel = 1;
+            pe_CPU_CYCLES.pinned = 1;
+            // pe_llc_write_acc.exclude_idle = 1;
+            // pe_llc_write_acc.exclude_hv = 1;
+
+            memset(&pe_BUS_CYCLES, 0, sizeof(struct perf_event_attr));
+            pe_BUS_CYCLES.type = PERF_TYPE_HARDWARE; // 使用硬件缓存事件类型
+            pe_BUS_CYCLES.size = sizeof(struct perf_event_attr);
+            pe_BUS_CYCLES.config = PERF_COUNT_HW_BUS_CYCLES;
+            pe_BUS_CYCLES.exclude_kernel = 1;
+            pe_BUS_CYCLES.pinned = 1;
+            // pe_llc_write_acc.exclude_idle = 1;
+            // pe_llc_write_acc.exclude_hv = 1;
+
+            memset(&pe_llc_cache_write_miss, 0, sizeof(struct perf_event_attr));
+            pe_llc_cache_write_miss.type = PERF_TYPE_HW_CACHE; // 使用硬件缓存事件类型
+            pe_llc_cache_write_miss.size = sizeof(struct perf_event_attr);
+            pe_llc_cache_write_miss.config = (PERF_COUNT_HW_CACHE_LL) | (PERF_COUNT_HW_CACHE_OP_WRITE << 8) | (PERF_COUNT_HW_CACHE_RESULT_ACCESS << 16);
+            pe_llc_cache_write_miss.exclude_kernel = 1;
+            pe_llc_cache_write_miss.pinned = 1;
+            // pe_llc_write_acc.exclude_idle = 1;
+            // pe_llc_write_acc.exclude_hv = 1;
+
+            memset(&pe_llc_cache_write_acc, 0, sizeof(struct perf_event_attr));
+            pe_llc_cache_write_acc.type = PERF_TYPE_HW_CACHE; // 使用硬件缓存事件类型
+            pe_llc_cache_write_acc.size = sizeof(struct perf_event_attr);
+            pe_llc_cache_write_acc.config = (PERF_COUNT_HW_CACHE_LL) | (PERF_COUNT_HW_CACHE_OP_WRITE << 8) | (PERF_COUNT_HW_CACHE_RESULT_ACCESS << 16);
+            pe_llc_cache_write_acc.exclude_kernel = 1;
+            pe_llc_cache_write_acc.pinned = 1;
+            // pe_llc_write_acc.exclude_idle = 1;
+            // pe_llc_write_acc.exclude_hv = 1;
+
+            memset(&pe_llc_cache_read_miss, 0, sizeof(struct perf_event_attr));
+            pe_llc_cache_read_miss.type = PERF_TYPE_HW_CACHE; // 使用硬件缓存事件类型
+            pe_llc_cache_read_miss.size = sizeof(struct perf_event_attr);
+            pe_llc_cache_read_miss.config = (PERF_COUNT_HW_CACHE_LL) | (PERF_COUNT_HW_CACHE_OP_READ << 8) | (PERF_COUNT_HW_CACHE_RESULT_MISS << 16);
+            pe_llc_cache_read_miss.exclude_kernel = 1;
+            pe_llc_cache_read_miss.pinned = 1;
+            // pe_llc_write_miss.exclude_idle = 1;
+            // pe_llc_write_miss.exclude_hv = 1;
+
+            memset(&pe_llc_cache_read_acc, 0, sizeof(struct perf_event_attr));
+            pe_llc_cache_read_acc.type = PERF_TYPE_HW_CACHE; // 使用硬件缓存事件类型
+            pe_llc_cache_read_acc.size = sizeof(struct perf_event_attr);
+            pe_llc_cache_read_acc.config = (PERF_COUNT_HW_CACHE_LL) | (PERF_COUNT_HW_CACHE_OP_READ << 8) | (PERF_COUNT_HW_CACHE_RESULT_ACCESS << 16);
+            pe_llc_cache_read_acc.exclude_kernel = 1;
+            pe_llc_cache_read_acc.pinned = 1;
+            // pe_llc_write_acc.exclude_idle = 1;
+            // pe_llc_write_acc.exclude_hv = 1;
+
+            memset(&pe_l1_cache_write_acc, 0, sizeof(struct perf_event_attr));
+            pe_l1_cache_write_acc.type = PERF_TYPE_HW_CACHE; // 使用硬件缓存事件类型
+            pe_l1_cache_write_acc.size = sizeof(struct perf_event_attr);
+            pe_l1_cache_write_acc.config = (PERF_COUNT_HW_CACHE_L1D) | (PERF_COUNT_HW_CACHE_OP_WRITE << 8) | (PERF_COUNT_HW_CACHE_RESULT_ACCESS << 16);
+            pe_l1_cache_write_acc.exclude_kernel = 1;
+            pe_l1_cache_write_acc.pinned = 1;
+            // pe_llc_write_acc.exclude_idle = 1;
+            // pe_llc_write_acc.exclude_hv = 1;
+
+            memset(&pe_l1_cache_read_miss, 0, sizeof(struct perf_event_attr));
+            pe_l1_cache_read_miss.type = PERF_TYPE_HW_CACHE; // 使用硬件缓存事件类型
+            pe_l1_cache_read_miss.size = sizeof(struct perf_event_attr);
+            pe_l1_cache_read_miss.config = (PERF_COUNT_HW_CACHE_L1D) | (PERF_COUNT_HW_CACHE_OP_READ << 8) | (PERF_COUNT_HW_CACHE_RESULT_MISS << 16);
+            pe_l1_cache_read_miss.exclude_kernel = 1;
+            pe_l1_cache_read_miss.pinned = 1;
+            // pe_llc_write_miss.exclude_idle = 1;
+            // pe_llc_write_miss.exclude_hv = 1;
+
+            memset(&pe_l1_cache_read_acc, 0, sizeof(struct perf_event_attr));
+            pe_l1_cache_read_acc.type = PERF_TYPE_HW_CACHE; // 使用硬件缓存事件类型
+            pe_l1_cache_read_acc.size = sizeof(struct perf_event_attr);
+            pe_l1_cache_read_acc.config = (PERF_COUNT_HW_CACHE_L1D) | (PERF_COUNT_HW_CACHE_OP_READ << 8) | (PERF_COUNT_HW_CACHE_RESULT_ACCESS << 16);
+            pe_l1_cache_read_acc.exclude_kernel = 1;
+            pe_l1_cache_read_acc.pinned = 1;
+            // pe_llc_write_acc.exclude_idle = 1;
+            // pe_llc_write_acc.exclude_hv = 1;
+            pid_t pid = getpid();
+            int fd_llc_w_miss = (verbose_more_setting!=more_info_settings::LLC_W_Info)?(-1):(syscall(__NR_perf_event_open, &pe_llc_cache_write_miss, pid, -1, -1, 0));
+            int fd_llc_w_acc = (verbose_more_setting!=more_info_settings::LLC_W_Info)?(-1):(syscall(__NR_perf_event_open, &pe_llc_cache_write_acc, pid, -1, -1, 0));
+            int fd_llc_r_miss = (verbose_more_setting!=more_info_settings::LLC_R_Info)?(-1):(syscall(__NR_perf_event_open, &pe_llc_cache_read_miss, pid, -1, -1, 0));
+            int fd_llc_r_acc = (verbose_more_setting!=more_info_settings::LLC_R_Info)?(-1):(syscall(__NR_perf_event_open, &pe_llc_cache_read_acc, pid, -1, -1, 0));
+            int fd_l1_w_acc = (verbose_more_setting!=more_info_settings::L1D_Info)?(-1):(syscall(__NR_perf_event_open, &pe_l1_cache_write_acc, pid, -1, -1, 0));
+            int fd_l1_r_miss = (verbose_more_setting!=more_info_settings::L1D_Info)?(-1):(syscall(__NR_perf_event_open, &pe_l1_cache_read_miss, pid, -1, -1, 0));
+            int fd_l1_r_acc = (verbose_more_setting!=more_info_settings::L1D_Info)?(-1):(syscall(__NR_perf_event_open, &pe_l1_cache_read_acc, pid, -1, -1, 0));
+            int fd_cpu_ref_cycle = (verbose_more_setting!=more_info_settings::Cycles_Info)?(-1):(syscall(__NR_perf_event_open, &pe_CPU_REF_CYCLES, pid, -1, -1, 0));
+            int fd_cpu_cycle = (verbose_more_setting!=more_info_settings::Cycles_Info)?(-1):(syscall(__NR_perf_event_open, &pe_CPU_CYCLES, pid, -1, -1, 0));
+            int fd_bus_cycle = (verbose_more_setting!=more_info_settings::Cycles_Info)?(-1):(syscall(__NR_perf_event_open, &pe_BUS_CYCLES, pid, -1, -1, 0));
+            int fd_stall_frontend_cycle = (verbose_more_setting!=more_info_settings::Cycles_stall_Info)?(-1):(syscall(__NR_perf_event_open, &pe_STALLED_CYCLES_FRONTEND, pid, -1, -1, 0));
+            int fd_stall_backtend_cycle = (verbose_more_setting!=more_info_settings::Cycles_stall_Info)?(-1):(syscall(__NR_perf_event_open, &pe_STALLED_CYCLES_BACKEND, pid, -1, -1, 0));
+
+            double start_ms = get_msec();
+            status = stream->enqueue_primitive(primitive_iface, ctx);
+            stream->wait();
+            double duration_ms = get_msec() - start_ms;
+            unsigned long count[20];
+            (verbose_more_setting!=more_info_settings::LLC_W_Info)?(-1):read(fd_llc_w_miss, &count[2], sizeof(unsigned long));
+            (verbose_more_setting!=more_info_settings::LLC_W_Info)?(-1):read(fd_llc_w_acc, &count[3], sizeof(unsigned long));
+            (verbose_more_setting!=more_info_settings::LLC_R_Info)?(-1):read(fd_llc_r_miss, &count[4], sizeof(unsigned long));
+            (verbose_more_setting!=more_info_settings::LLC_R_Info)?(-1):read(fd_llc_r_acc, &count[5], sizeof(unsigned long));
+            (verbose_more_setting!=more_info_settings::L1D_Info)?(-1):read(fd_l1_w_acc, &count[7], sizeof(unsigned long));
+            (verbose_more_setting!=more_info_settings::L1D_Info)?(-1):read(fd_l1_r_miss, &count[8], sizeof(unsigned long));
+            (verbose_more_setting!=more_info_settings::L1D_Info)?(-1):read(fd_l1_r_acc, &count[9], sizeof(unsigned long));
+
+            (verbose_more_setting!=more_info_settings::Cycles_Info)?(-1):read(fd_cpu_ref_cycle, &count[14], sizeof(unsigned long));
+            (verbose_more_setting!=more_info_settings::Cycles_Info)?(-1):read(fd_cpu_cycle, &count[15], sizeof(unsigned long));
+            (verbose_more_setting!=more_info_settings::Cycles_Info)?(-1):read(fd_bus_cycle, &count[17], sizeof(unsigned long));
+            (verbose_more_setting!=more_info_settings::Cycles_stall_Info)?(-1):read(fd_stall_frontend_cycle, &count[18], sizeof(unsigned long));
+            (verbose_more_setting!=more_info_settings::Cycles_stall_Info)?(-1):read(fd_stall_backtend_cycle, &count[19], sizeof(unsigned long));
+
+            (verbose_more_setting!=more_info_settings::LLC_W_Info)?(-1):printf("LLC hw_cache write misses: %'lu\n", count[2]);
+            (verbose_more_setting!=more_info_settings::LLC_W_Info)?(-1):printf("LLC hw_cache write acc: %'lu\n", count[3]);
+            (verbose_more_setting!=more_info_settings::LLC_R_Info)?(-1):printf("LLC hw_cache read misses: %'lu\n", count[4]);
+            (verbose_more_setting!=more_info_settings::LLC_R_Info)?(-1):printf("LLC hw_cache read acc: %'lu\n", count[5]);
+            (verbose_more_setting!=more_info_settings::L1D_Info)?(-1):printf("L1 hw_l1cache write acc: %'lu\n", count[7]);
+            (verbose_more_setting!=more_info_settings::L1D_Info)?(-1):printf("L1 hw_l1cache read misses: %'lu\n", count[8]);
+            (verbose_more_setting!=more_info_settings::L1D_Info)?(-1):printf("L1 hw_l1cache read acc: %'lu\n", count[9]);
+
+            (verbose_more_setting!=more_info_settings::Cycles_Info)?(-1):printf("cpu_ref_cycle: %'lu\n", count[14]);
+            (verbose_more_setting!=more_info_settings::Cycles_Info)?(-1):printf("cpu_cycle: %'lu\n", count[15]);
+            (verbose_more_setting!=more_info_settings::Cycles_Info)?(-1):printf("bus_cycle: %'lu\n", count[17]);
+            (verbose_more_setting!=more_info_settings::Cycles_stall_Info)?(-1):printf("stall_frontend_cycle: %'lu\n", count[18]);
+            (verbose_more_setting!=more_info_settings::Cycles_stall_Info)?(-1):printf("stall_backtend_cycle: %'lu\n", count[19]);
+
+            (verbose_more_setting!=more_info_settings::LLC_W_Info)?(-1):printf("LLC hw_cache write_miss ratio: %lf\n", ((count[3]==0)?(1.0):(1.0*count[2])/count[3]));
+            (verbose_more_setting!=more_info_settings::LLC_R_Info)?(-1):printf("LLC hw_cache read_miss ratio: %lf\n", (count[5]==0)?(1.0):((1.0*count[4])/count[5]));
+            (verbose_more_setting!=more_info_settings::L1D_Info)?(-1):printf("L1 hw_l1cache read/write ratio: r%lf:w%lf\n", (count[9]+count[7]==0)?(1.0):(1.0*count[9])/(count[9]+count[7]),(1.0*count[7])/(count[9]+count[7]));
+            (verbose_more_setting!=more_info_settings::L1D_Info)?(-1):printf("L1 hw_l1cache read_miss ratio: %lf\n", (count[9]==0)?(1.0):((1.0*count[8])/count[9]));
+            (verbose_more_setting!=more_info_settings::L1D_Info)?(-1):printf("L1 hw_l1cache read_miss(write alloc) ratio: %lf\n", (count[9]==0)?(1.0):((1.0*count[8])/(count[9]+count[7])));
+
+            (verbose_more_setting!=more_info_settings::LLC_W_Info)?(-1):close(fd_llc_w_miss);
+            (verbose_more_setting!=more_info_settings::LLC_W_Info)?(-1):close(fd_llc_w_acc);
+            (verbose_more_setting!=more_info_settings::LLC_R_Info)?(-1):close(fd_llc_r_miss);
+            (verbose_more_setting!=more_info_settings::LLC_R_Info)?(-1):close(fd_llc_r_acc);
+            (verbose_more_setting!=more_info_settings::L1D_Info)?(-1):close(fd_l1_w_acc);
+            (verbose_more_setting!=more_info_settings::L1D_Info)?(-1):close(fd_l1_r_miss);
+            (verbose_more_setting!=more_info_settings::L1D_Info)?(-1):close(fd_l1_r_acc);
+
+            (verbose_more_setting!=more_info_settings::Cycles_Info)?(-1):close(fd_bus_cycle);
+            (verbose_more_setting!=more_info_settings::Cycles_Info)?(-1):close(fd_cpu_cycle);
+            (verbose_more_setting!=more_info_settings::Cycles_Info)?(-1):close(fd_cpu_ref_cycle);
+            (verbose_more_setting!=more_info_settings::Cycles_stall_Info)?(-1):close(fd_stall_frontend_cycle);
+            (verbose_more_setting!=more_info_settings::Cycles_stall_Info)?(-1):close(fd_stall_backtend_cycle);
+            
+            VPROF(start_ms, exec, VERBOSE_profile, primitive_iface->pd()->info(),
+                    duration_ms);
+        }
     } else {
         status = stream->enqueue_primitive(primitive_iface, ctx);
     }

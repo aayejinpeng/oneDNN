@@ -96,7 +96,9 @@ private:
     // Note: can't be `const` because of `parse_result`.
     int report() {
         const prb_t *prb = &prb_;
-        parse_result(res_, prb_.str());
+        std::string s = getenv("ONEDNN_VERBOSE_MORE");
+        if(s != "perf_info")
+            parse_result(res_, prb_.str());
         if (has_bench_mode_bit(mode_bit_t::perf)) {
             perf_report_t pr(prb, perf_template_.c_str());
             pr.report(&res_, prb_.str());
