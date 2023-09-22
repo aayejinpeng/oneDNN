@@ -351,7 +351,7 @@ int main(int argc, char **argv) {
 
 	//[Execute model]
 	uint64_t dur_time = 0;
-	int iter_count = 1;
+	int iter_count = 100;
     std::vector<float> user_src(batch_size * input_channel * input_width * input_height);
 	//write_to_dnnl_memory(inputs.data(), net_args.at(0).find(DNNL_ARG_SRC)->second);
 
