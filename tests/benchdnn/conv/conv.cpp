@@ -248,7 +248,7 @@ dnnl_status_t init_pd(init_pd_args_t<prb_t> &init_pd_args) {
             if (prb->dir != FWD_B) bia_d.reset(nullptr);
             DNN_SAFE_STATUS(dnnl_convolution_forward_primitive_desc_create(
                     &init_pd_args.pd, init_pd_args.engine,
-                    prb->dir == FWD_I ? dnnl_forward_inference
+                    (prb->dir == FWD_I || prb->dir == FWD_B)? dnnl_forward_inference
                                       : dnnl_forward_training,
                     alg, init_pd_args.src_md ? init_pd_args.src_md : src_d,
                     wei_d, bia_d, dst_d, prb->strides().data(),
